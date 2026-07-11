@@ -5,6 +5,12 @@ Live connectivity (REST/websocket, credentials) is supplied by the runtime as an
 injected transport/port.
 """
 
+from .binance_rest import (
+    BinanceExecution,
+    BinanceMarketData,
+    BinanceRestClient,
+    Transport,
+)
 from .fills import Fill, RealizedPnL, aggregate_entry, realized_pnl
 from .filters import SymbolFilters
 from .market_data import parse_depth, parse_klines
@@ -17,4 +23,8 @@ __all__ = [
     "realized_pnl",
     "parse_klines",
     "parse_depth",
+    "BinanceRestClient",
+    "BinanceMarketData",
+    "BinanceExecution",
+    "Transport",
 ]
