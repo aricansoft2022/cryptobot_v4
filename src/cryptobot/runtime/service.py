@@ -113,6 +113,11 @@ class TradingService:
     def open_positions(self, symbol: str) -> List[StrategyPosition]:
         return list(self._positions.get(symbol, []))
 
+    @property
+    def market_data(self) -> MarketDataPort:
+        """The injected market-data port (used by the monitoring surface)."""
+        return self._md
+
     # -- internals ----------------------------------------------------------
 
     def _candle_limit(self, params: CoinStrategyParameters) -> int:

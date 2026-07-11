@@ -46,11 +46,13 @@ src/cryptobot/
     service.py       # TradingService: the per-coin scheduler loop
     paper.py         # paper ledger account + simulated executor
     live.py          # real Binance account, reconciliation, guarded runner
+    metrics.py       # realized-trade metrics + live status snapshot
+    status_server.py # stdlib HTTP server exposing the snapshot as JSON
   backtest/          # historical replay through the SAME live engine
     replay.py        # ReplayMarketData + BacktestClock
     runner.py        # run_backtest + BacktestReport
   cli.py             # runnable entrypoint: paper-trade, backtest, or live
-tests/               # 194 tests; exact-boundary and golden-value coverage
+tests/               # 203 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -233,6 +235,30 @@ Single-process operation assumes the worker lease is always held; a multi-instan
 deployment must supply a real distributed lease. Test on `--testnet` first and
 start with small `capital_limit_usdt`.
 
+## Monitoring
+
+Pass `--status-port N` to any paper or live run to serve a read-only JSON status
+snapshot at `http://127.0.0.1:N/status` (and a `/health` probe). `MetricsTracker`
+accumulates realized trades from each tick; `build_status` adds the open positions
+with a **conservative unrealized-PnL estimate** (same estimator as the exit
+decision, against the current book). Example payload:
+
+```json
+{
+  "available_quote": "900",
+  "open_positions": [
+    {"symbol": "BTCUSDT", "state": "OPEN", "qty": "1", "invested_quote": "100",
+     "estimated_net_pnl": "-1"}
+  ],
+  "open_invested_quote": "100", "estimated_unrealized_net_pnl": "-1",
+  "realized_trades": 0, "realized_net_pnl": "0", "wins": 0, "losses": 0, "win_rate": 0.0
+}
+```
+
+```bash
+python -m cryptobot --config examples/config.example.json --status-port 8787
+```
+
 ## Immutable per-position snapshot
 
 `CoinStrategyParameters` is frozen. When a position opens it captures the
@@ -254,7 +280,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 194 tests
+pytest            # 203 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
