@@ -1,0 +1,35 @@
+{
+  "coins": {
+    "BTCUSDT": {
+      "rsi_oversold": 30,
+      "rsi_overbought": 70,
+      "adx_low": 20,
+      "adx_high": 50,
+      "min_net_profit_pct": "0.5",
+      "rsi_period": 14,
+      "rsi_ma_period": 14,
+      "adx_period": 14,
+      "adr_period": 14,
+      "capital_limit_usdt": "1000",
+      "slot_count": 3
+    },
+    "ETHUSDT": {
+      "rsi_oversold": 28,
+      "rsi_overbought": 72,
+      "adx_low": 18,
+      "adx_high": 55,
+      "min_net_profit_pct": "0.6",
+      "rsi_period": 14,
+      "rsi_ma_period": 20,
+      "adx_period": 14,
+      "adr_period": 14,
+      "capital_limit_usdt": "500",
+      "slot_count": 2
+    }
+  },
+  "cost_model": {
+    "exit_fee_rate": "0.001",
+    "safety_buffer_frac": "0.0005"
+  },
+  "candle_buffer": 5
+}

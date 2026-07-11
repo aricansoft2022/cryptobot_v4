@@ -14,6 +14,7 @@ from .binance_rest import (
 from .binance_ws import StreamingMarketData
 from .fills import Fill, RealizedPnL, aggregate_entry, realized_pnl
 from .filters import SymbolFilters
+from .http import urllib_transport
 from .market_data import parse_depth, parse_klines
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "BinanceExecution",
     "Transport",
     "StreamingMarketData",
+    "urllib_transport",
 ]
