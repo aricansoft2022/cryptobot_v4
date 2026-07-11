@@ -1,8 +1,15 @@
 """Runtime boundary: ports the orchestrator depends on, and the orchestrator."""
 
 from .orchestrator import TradingRuntime, split_symbol
+from .paper import LedgerAccount, PaperExecution
 from .ports import AccountPort, ClockPort, ExecutionPort, MarketDataPort
 from .providers import SystemClock, equal_slot_quote_amount, is_market_data_fresh
+from .service import (
+    OperationalStatus,
+    ServiceConfig,
+    TickReport,
+    TradingService,
+)
 
 __all__ = [
     "MarketDataPort",
@@ -14,4 +21,10 @@ __all__ = [
     "SystemClock",
     "equal_slot_quote_amount",
     "is_market_data_fresh",
+    "TradingService",
+    "ServiceConfig",
+    "OperationalStatus",
+    "TickReport",
+    "LedgerAccount",
+    "PaperExecution",
 ]

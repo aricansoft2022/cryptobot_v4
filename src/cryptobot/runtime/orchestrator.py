@@ -12,8 +12,10 @@ from decimal import Decimal
 from typing import List, Optional, Sequence
 
 from ..execution.gates import OperationalGates, ProcessedCandleGuard
+from ..execution.orderbook import OrderBook
 from ..execution.pnl import ExitCostModel
 from ..exchange.fills import Fill, RealizedPnL, aggregate_entry, realized_pnl
+from ..market.candle import Candle
 from ..exchange.filters import SymbolFilters
 from ..strategy.engine import RuntimeMode, evaluate_buy, evaluate_exit
 from ..strategy.parameters import CoinStrategyParameters
@@ -73,14 +75,18 @@ class TradingRuntime:
         quote_amount: Decimal,
         mode: RuntimeMode = RuntimeMode.RUNNING,
         commission_rates=None,
+        candles: Optional[Sequence[Candle]] = None,
     ) -> Optional[StrategyPosition]:
         """Evaluate entry; if a real buy is warranted, place it and open a position.
 
         ``quote_amount`` is the operational order size (must already respect the
         coin's ``capital_limit_usdt`` / ``slot_count``); this method does not size
-        the order itself. Returns the opened position, or ``None`` if no buy.
+        the order itself. Pass ``candles`` to reuse an already-fetched series
+        (avoids a second market-data call). Returns the opened position, or
+        ``None`` if no buy.
         """
-        candles = self._fetch_candles(symbol, params)
+        if candles is None:
+            candles = self._fetch_candles(symbol, params)
         decision = evaluate_buy(symbol, candles, params, gates, self._guard, mode)
         if not decision.buy:
             return None
@@ -102,14 +108,19 @@ class TradingRuntime:
         mode: RuntimeMode = RuntimeMode.RUNNING,
         filters: Optional[SymbolFilters] = None,
         commission_rates=None,
+        candles: Optional[Sequence[Candle]] = None,
+        order_book: Optional[OrderBook] = None,
     ) -> Optional[RealizedPnL]:
         """Evaluate exit; if a sell is warranted, place it and realize PnL.
 
         With ``filters`` provided, the sell quantity is floored to the symbol's
-        ``stepSize`` before submission. Returns realized PnL, or ``None`` if hold.
+        ``stepSize`` before submission. Pass ``candles`` / ``order_book`` to reuse
+        already-fetched data. Returns realized PnL, or ``None`` if hold.
         """
-        candles = self._fetch_candles(position.symbol, position.snapshot)
-        order_book = self._market_data.get_order_book(position.symbol)
+        if candles is None:
+            candles = self._fetch_candles(position.symbol, position.snapshot)
+        if order_book is None:
+            order_book = self._market_data.get_order_book(position.symbol)
         decision = evaluate_exit(position, candles, order_book, cost_model, mode)
         if not decision.sell:
             return None

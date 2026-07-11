@@ -38,11 +38,15 @@ src/cryptobot/
     market_data.py   # Binance klines -> Candle[]; depth -> OrderBook
     binance_rest.py  # signed REST client + port adapters (injected transport)
     binance_ws.py    # streaming MarketDataPort (rolling closed-candle buffer)
+    http.py          # stdlib urllib transport (production HTTP, no deps)
   runtime/           # composition boundary
     ports.py         # MarketData / Account / Execution / Clock protocols
     orchestrator.py  # thin coordinator: decision core + injected ports
     providers.py     # operational helpers: clock, sizing, data freshness
-tests/               # 152 tests; exact-boundary and golden-value coverage
+    service.py       # TradingService: the per-coin scheduler loop
+    paper.py         # paper ledger account + simulated executor
+  cli.py             # runnable paper-trading entrypoint (python -m cryptobot)
+tests/               # 173 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -159,6 +163,25 @@ gate construction are supplied by the caller, so no signal logic lives there.
 an equal-slot `equal_slot_quote_amount` sizing default, and an
 `is_market_data_fresh` check) — none of which touch the strategy signal.
 
+`service.py` (`TradingService`) is the per-coin scheduler: each `tick` it builds
+the operational gates from live account/data state, evaluates entries for every
+configured coin and exits for every open position, and tracks positions. Infra
+signals it can't derive (runtime RUNNING, trading enabled, worker lease,
+reconciliation, system safety, per-coin active / pending-delete) are passed in as
+an `OperationalStatus`. It composes the decision core only — it invents no signal.
+
+## Running it
+
+`cli.py` (`python -m cryptobot`) runs the strategy against **real, read-only**
+Binance market data while simulating fills in a paper ledger — safe by default,
+no API keys required (`runtime/paper.py`). Live order placement is deliberately
+not exposed by the CLI; wire `BinanceExecution` into a `TradingService` yourself
+to trade for real.
+
+```bash
+python -m cryptobot --config examples/config.example.json --ticks 5 --interval 60
+```
+
 ## Immutable per-position snapshot
 
 `CoinStrategyParameters` is frozen. When a position opens it captures the
@@ -180,7 +203,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 152 tests
+pytest            # 173 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
