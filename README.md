@@ -32,7 +32,14 @@ src/cryptobot/
     orderbook.py     # bid-walking sell estimate (captures slippage)
     pnl.py           # conservative estimated net PnL
     gates.py         # operational safety gates + per-candle idempotency
-tests/               # 100 tests; exact-boundary and golden-value coverage
+  exchange/          # Binance adapter (pure mapping/mechanics, no I/O)
+    filters.py       # symbol filters: order acceptance + increment rounding
+    fills.py         # real fills -> RealizedEntry; realized PnL + slippage
+    market_data.py   # Binance klines -> Candle[]; depth -> OrderBook
+  runtime/           # composition boundary
+    ports.py         # MarketData / Account / Execution / Clock protocols
+    orchestrator.py  # thin coordinator: decision core + injected ports
+tests/               # 129 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -112,7 +119,29 @@ estimated_net_pnl = exit_proceeds - true_entry_cost - entry_fees
 ```
 
 Realized PnL after a fill is a separate concern and must be computed from real
-Binance fills/commissions; the estimate is only for the pre-trade decision.
+Binance fills/commissions; the estimate is only for the pre-trade decision
+(`exchange/fills.py` `realized_pnl`, including estimate-vs-realized slippage).
+
+## Binance adapter & runtime
+
+`exchange/` translates Binance data into the core's types and back — pure
+mechanics, no strategy and no I/O:
+
+* **`filters.py`** — parses `exchangeInfo` symbol filters (`LOT_SIZE` /
+  `MARKET_LOT_SIZE`, `PRICE_FILTER`, `NOTIONAL`) and deterministically rounds
+  quantities/prices to valid increments and checks acceptance. This backs the
+  `symbol_filters_ok` gate and sell-quantity rounding.
+* **`fills.py`** — aggregates real fills into an immutable `RealizedEntry`
+  (weighted avg price, true cost, fees valued in quote, sellable qty net of
+  base-asset commission) and computes realized PnL from real sell fills.
+* **`market_data.py`** — maps Binance klines to `Candle`s (dropping the still-open
+  one) and a depth snapshot to an `OrderBook`.
+
+`runtime/` is the composition boundary. `ports.py` declares the injected
+dependencies (market data, account, execution, clock) as `Protocol`s;
+`orchestrator.py` (`TradingRuntime`) only *coordinates* the existing
+`evaluate_buy` / `evaluate_exit` decisions with those ports — order sizing and
+gate construction are supplied by the caller, so no signal logic lives there.
 
 ## Immutable per-position snapshot
 
@@ -124,17 +153,18 @@ rules never change mid-life.
 
 ## Scope / boundary
 
-This package is the pure, deterministic **decision core** and performs no I/O.
-Live infrastructure — Binance connectivity, market-data streaming, balances,
-symbol filters, worker leases, reconciliation, order placement and realized-fill
-accounting — is intentionally out of scope here and is represented as injected
-inputs (`OperationalGates`, `OrderBook`, realized `RealizedEntry` data). This
-keeps every strategy rule unit-testable and exactly auditable against the spec.
+The decision core and the Binance adapter are both pure and perform **no I/O**.
+Live connectivity — REST/websocket transport, API credentials, balances, worker
+leases, reconciliation, and the actual placement of orders — is injected through
+the `runtime/` ports (`MarketDataPort`, `AccountPort`, `ExecutionPort`,
+`ClockPort`) and the `OperationalGates`. This keeps every strategy rule and every
+mapping unit-testable and exactly auditable against the spec, with no secrets or
+network in the codebase.
 
 ## Running the tests
 
 ```bash
-pytest            # 100 tests
+pytest            # 129 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
