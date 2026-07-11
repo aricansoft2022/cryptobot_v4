@@ -37,11 +37,12 @@ src/cryptobot/
     fills.py         # real fills -> RealizedEntry; realized PnL + slippage
     market_data.py   # Binance klines -> Candle[]; depth -> OrderBook
     binance_rest.py  # signed REST client + port adapters (injected transport)
+    binance_ws.py    # streaming MarketDataPort (rolling closed-candle buffer)
   runtime/           # composition boundary
     ports.py         # MarketData / Account / Execution / Clock protocols
     orchestrator.py  # thin coordinator: decision core + injected ports
     providers.py     # operational helpers: clock, sizing, data freshness
-tests/               # 143 tests; exact-boundary and golden-value coverage
+tests/               # 152 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -143,7 +144,11 @@ mechanics, no strategy and no I/O:
 signing but delegates the actual HTTP call to an **injected transport**, so no
 credentials or network live in the codebase. `BinanceMarketData` /
 `BinanceExecution` implement the runtime ports on top of it; production injects a
-real HTTP client, tests inject a fake.
+real HTTP client, tests inject a fake. `binance_ws.py` (`StreamingMarketData`) is
+a streaming `MarketDataPort`: it folds parsed WebSocket kline/depth messages into
+a rolling buffer of **closed** candles (replacing a re-sent final candle, ignoring
+stale ones) and the latest order book — the socket loop itself is injected, and
+contiguity is still enforced downstream so the fail-closed guarantee holds.
 
 `runtime/` is the composition boundary. `ports.py` declares the injected
 dependencies (market data, account, execution, clock) as `Protocol`s;
@@ -175,7 +180,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 143 tests
+pytest            # 152 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
