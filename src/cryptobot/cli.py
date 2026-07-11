@@ -37,9 +37,11 @@ from .exchange.binance_rest import BinanceMarketData, BinanceRestClient
 from .exchange.http import urllib_transport
 from .execution.pnl import ExitCostModel
 from .runtime.live import build_live_service, run_live
+from .runtime.metrics import MetricsTracker, build_status
 from .runtime.paper import LedgerAccount, PaperExecution
 from .runtime.providers import SystemClock
 from .runtime.service import OperationalStatus, ServiceConfig, TickReport, TradingService
+from .runtime.status_server import StatusServer
 from .strategy.parameters import CoinStrategyParameters
 
 
@@ -160,6 +162,31 @@ def _run_backtest(args, config: ServiceConfig) -> int:
     return 0
 
 
+def _setup_monitoring(symbols, service, account, cost_model, status_port):
+    """Wire a metrics tracker + optional status HTTP server.
+
+    Returns ``(update, server)`` where ``update(report)`` folds a tick into the
+    metrics and refreshes the served snapshot, and ``server`` is a started
+    :class:`StatusServer` or ``None``.
+    """
+    metrics = MetricsTracker()
+    holder = {"snapshot": {}}
+
+    def update(report: TickReport) -> None:
+        now = int(time.time() * 1000)
+        metrics.record_report(report, now)
+        holder["snapshot"] = build_status(
+            symbols, service, account, service.market_data, cost_model, metrics, now
+        ).as_dict()
+
+    update(TickReport())  # prime the snapshot before serving
+    server = None
+    if status_port is not None:
+        server = StatusServer(lambda: holder["snapshot"], port=int(status_port)).start()
+        print(f"Status server on {server.url}")
+    return update, server
+
+
 def _live_report(i: int, report: TickReport, recon) -> None:
     if not recon.clean:
         print(f"[tick {i}] reconciliation DIRTY — trading halted: {recon.problems}")
@@ -186,14 +213,25 @@ def _run_live(args, config: ServiceConfig) -> int:
     service, account = build_live_service(client, config)
     where = "TESTNET" if args.testnet else "REAL MONEY"
     print(f"*** LIVE trading on {where}: {list(config.coins)} ***")
+    update, server = _setup_monitoring(
+        list(config.coins), service, account, config.cost_model, args.status_port
+    )
+
+    def on_report(i, report, recon):
+        update(report)
+        _live_report(i, report, recon)
+
     try:
         run_live(
             service, account, client, list(config.coins),
             ticks=args.ticks or None, interval_s=args.interval,
-            on_report=_live_report,
+            on_report=on_report,
         )
     except KeyboardInterrupt:
         print("\nStopped.")
+    finally:
+        if server is not None:
+            server.stop()
     return 0
 
 
@@ -209,6 +247,7 @@ def main(argv=None) -> int:
     parser.add_argument("--live", action="store_true", help="Trade live via Binance (requires API keys + confirmation).")
     parser.add_argument("--testnet", action="store_true", help="Use the Binance testnet (safe, fake money).")
     parser.add_argument("--yes-trade-real-money", action="store_true", help="Required to trade REAL money in --live mode.")
+    parser.add_argument("--status-port", type=int, default=None, help="Serve a JSON status snapshot on this port (paper/live).")
     args = parser.parse_args(argv)
 
     with open(args.config, "r", encoding="utf-8") as handle:
@@ -223,13 +262,24 @@ def main(argv=None) -> int:
     service, account = build_paper_service(client, config, args.quote_balance)
 
     print(f"Paper trading {list(config.coins)} — starting balance {args.quote_balance}")
+    update, server = _setup_monitoring(
+        list(config.coins), service, account, config.cost_model, args.status_port
+    )
+
+    def on_report(i, report, acct):
+        update(report)
+        _print_report(i, report, acct)
+
     try:
         run_paper(
             service, account,
             ticks=args.ticks or None,
             interval_s=args.interval,
-            on_report=_print_report,
+            on_report=on_report,
         )
     except KeyboardInterrupt:
         print("\nStopped.")
+    finally:
+        if server is not None:
+            server.stop()
     return 0
