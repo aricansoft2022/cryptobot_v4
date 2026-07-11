@@ -36,10 +36,12 @@ src/cryptobot/
     filters.py       # symbol filters: order acceptance + increment rounding
     fills.py         # real fills -> RealizedEntry; realized PnL + slippage
     market_data.py   # Binance klines -> Candle[]; depth -> OrderBook
+    binance_rest.py  # signed REST client + port adapters (injected transport)
   runtime/           # composition boundary
     ports.py         # MarketData / Account / Execution / Clock protocols
     orchestrator.py  # thin coordinator: decision core + injected ports
-tests/               # 129 tests; exact-boundary and golden-value coverage
+    providers.py     # operational helpers: clock, sizing, data freshness
+tests/               # 143 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -137,11 +139,20 @@ mechanics, no strategy and no I/O:
 * **`market_data.py`** — maps Binance klines to `Candle`s (dropping the still-open
   one) and a depth snapshot to an `OrderBook`.
 
+`binance_rest.py` holds the real Binance endpoint paths and HMAC-SHA256 request
+signing but delegates the actual HTTP call to an **injected transport**, so no
+credentials or network live in the codebase. `BinanceMarketData` /
+`BinanceExecution` implement the runtime ports on top of it; production injects a
+real HTTP client, tests inject a fake.
+
 `runtime/` is the composition boundary. `ports.py` declares the injected
 dependencies (market data, account, execution, clock) as `Protocol`s;
 `orchestrator.py` (`TradingRuntime`) only *coordinates* the existing
 `evaluate_buy` / `evaluate_exit` decisions with those ports — order sizing and
 gate construction are supplied by the caller, so no signal logic lives there.
+`providers.py` offers optional, overridable operational helpers (`SystemClock`,
+an equal-slot `equal_slot_quote_amount` sizing default, and an
+`is_market_data_fresh` check) — none of which touch the strategy signal.
 
 ## Immutable per-position snapshot
 
@@ -164,7 +175,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 129 tests
+pytest            # 143 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
