@@ -65,12 +65,20 @@ class PaperExecution:
     """An ``ExecutionPort`` that simulates fills from live prices (no real orders).
 
     Buys fill at the best ask, sells at the best bid; if the book is empty the
-    last closed candle's close is used. Commission is zero in paper mode.
+    last closed candle's close is used. An optional ``fee_rate`` applies a
+    quote-denominated commission to each fill (default 0 — free paper trading);
+    the backtester passes a realistic rate.
     """
 
-    def __init__(self, market_data: MarketDataPort, quote_asset: str = "USDT") -> None:
+    def __init__(
+        self,
+        market_data: MarketDataPort,
+        quote_asset: str = "USDT",
+        fee_rate: Any = Decimal("0"),
+    ) -> None:
         self._md = market_data
         self._quote_asset = quote_asset
+        self._fee_rate = _as_decimal(fee_rate)
 
     def _reference_price(self, symbol: str, side: str) -> Decimal:
         book = self._md.get_order_book(symbol)
@@ -86,8 +94,10 @@ class PaperExecution:
     def market_buy(self, symbol: str, quote_amount: Decimal) -> list:
         price = self._reference_price(symbol, "BUY")
         qty = _as_decimal(quote_amount) / price
-        return [Fill(price, qty, Decimal("0"), self._quote_asset)]
+        commission = _as_decimal(quote_amount) * self._fee_rate
+        return [Fill(price, qty, commission, self._quote_asset)]
 
     def market_sell(self, symbol: str, base_qty: Decimal) -> list:
         price = self._reference_price(symbol, "SELL")
-        return [Fill(price, _as_decimal(base_qty), Decimal("0"), self._quote_asset)]
+        commission = price * _as_decimal(base_qty) * self._fee_rate
+        return [Fill(price, _as_decimal(base_qty), commission, self._quote_asset)]
