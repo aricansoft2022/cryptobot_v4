@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import time
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Tuple
@@ -34,6 +36,7 @@ from typing import Any, Callable, Mapping, Optional, Tuple
 from .exchange.binance_rest import BinanceMarketData, BinanceRestClient
 from .exchange.http import urllib_transport
 from .execution.pnl import ExitCostModel
+from .runtime.live import build_live_service, run_live
 from .runtime.paper import LedgerAccount, PaperExecution
 from .runtime.providers import SystemClock
 from .runtime.service import OperationalStatus, ServiceConfig, TickReport, TradingService
@@ -157,8 +160,45 @@ def _run_backtest(args, config: ServiceConfig) -> int:
     return 0
 
 
+def _live_report(i: int, report: TickReport, recon) -> None:
+    if not recon.clean:
+        print(f"[tick {i}] reconciliation DIRTY — trading halted: {recon.problems}")
+    for pos in report.entries:
+        print(f"[tick {i}] BUY  {pos.symbol} qty={pos.entry.filled_base_qty} cost={pos.entry.true_entry_cost}")
+    for pos, pnl in report.exits:
+        print(f"[tick {i}] SELL {pos.symbol} net_pnl={pnl.net_pnl}")
+
+
+def _run_live(args, config: ServiceConfig) -> int:
+    api_key = os.environ.get("BINANCE_API_KEY", "")
+    api_secret = os.environ.get("BINANCE_API_SECRET", "")
+    if not api_key or not api_secret:
+        print("ERROR: --live requires BINANCE_API_KEY and BINANCE_API_SECRET environment variables.", file=sys.stderr)
+        return 2
+    if not args.testnet and not args.yes_trade_real_money:
+        print("ERROR: refusing to trade real money. Use --testnet, or pass --yes-trade-real-money to confirm.", file=sys.stderr)
+        return 2
+
+    base_url = "https://testnet.binance.vision" if args.testnet else args.base_url
+    client = BinanceRestClient(
+        urllib_transport, api_key=api_key, api_secret=api_secret, base_url=base_url
+    )
+    service, account = build_live_service(client, config)
+    where = "TESTNET" if args.testnet else "REAL MONEY"
+    print(f"*** LIVE trading on {where}: {list(config.coins)} ***")
+    try:
+        run_live(
+            service, account, client, list(config.coins),
+            ticks=args.ticks or None, interval_s=args.interval,
+            on_report=_live_report,
+        )
+    except KeyboardInterrupt:
+        print("\nStopped.")
+    return 0
+
+
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="cryptobot", description="Paper-run or backtest the strategy.")
+    parser = argparse.ArgumentParser(prog="cryptobot", description="Paper-run, backtest, or live-trade the strategy.")
     parser.add_argument("--config", required=True, help="Path to the JSON config file.")
     parser.add_argument("--quote-balance", default="1000", help="Starting paper/backtest quote balance.")
     parser.add_argument("--ticks", type=int, default=0, help="Number of ticks (0 = run until interrupted).")
@@ -166,6 +206,9 @@ def main(argv=None) -> int:
     parser.add_argument("--base-url", default="https://api.binance.com", help="Binance REST base URL.")
     parser.add_argument("--backtest", default=None, help="Path to a JSON klines file to backtest instead of paper-running.")
     parser.add_argument("--quote-per-order", default=None, help="Fixed quote size per order (backtest only).")
+    parser.add_argument("--live", action="store_true", help="Trade live via Binance (requires API keys + confirmation).")
+    parser.add_argument("--testnet", action="store_true", help="Use the Binance testnet (safe, fake money).")
+    parser.add_argument("--yes-trade-real-money", action="store_true", help="Required to trade REAL money in --live mode.")
     args = parser.parse_args(argv)
 
     with open(args.config, "r", encoding="utf-8") as handle:
@@ -173,6 +216,8 @@ def main(argv=None) -> int:
 
     if args.backtest:
         return _run_backtest(args, config)
+    if args.live:
+        return _run_live(args, config)
 
     client = BinanceRestClient(urllib_transport, base_url=args.base_url)
     service, account = build_paper_service(client, config, args.quote_balance)

@@ -45,11 +45,12 @@ src/cryptobot/
     providers.py     # operational helpers: clock, sizing, data freshness
     service.py       # TradingService: the per-coin scheduler loop
     paper.py         # paper ledger account + simulated executor
+    live.py          # real Binance account, reconciliation, guarded runner
   backtest/          # historical replay through the SAME live engine
     replay.py        # ReplayMarketData + BacktestClock
     runner.py        # run_backtest + BacktestReport
-  cli.py             # runnable entrypoint: paper-trade or backtest
-tests/               # 185 tests; exact-boundary and golden-value coverage
+  cli.py             # runnable entrypoint: paper-trade, backtest, or live
+tests/               # 194 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -205,6 +206,33 @@ By default the backtest uses the full available history as warmup so Wilder
 indicators are fully converged; a live deployment must fetch adequate warmup to
 match.
 
+## Live execution ⚠️
+
+`runtime/live.py` wires the service to place **real Binance orders**
+(`BinanceExecution`), backed by a real `BinanceAccount` (live balance + tracked
+slots/capital) and a **reconciliation gate**: every tick it checks that the
+exchange still holds at least the base quantity the bot expects, and halts trading
+(`reconciliation_clean = False`) on any shortfall from a manual sale, unexpected
+fill, or crash.
+
+Live trading is opt-in and hard to trigger by accident:
+
+- credentials come only from `BINANCE_API_KEY` / `BINANCE_API_SECRET` (never
+  stored or logged);
+- `--live` refuses to run without them;
+- real money requires an explicit `--yes-trade-real-money`; otherwise use
+  `--testnet` (Binance testnet, fake money).
+
+```bash
+export BINANCE_API_KEY=... BINANCE_API_SECRET=...
+python -m cryptobot --config examples/config.example.json --live --testnet        # safe
+python -m cryptobot --config examples/config.example.json --live --yes-trade-real-money
+```
+
+Single-process operation assumes the worker lease is always held; a multi-instance
+deployment must supply a real distributed lease. Test on `--testnet` first and
+start with small `capital_limit_usdt`.
+
 ## Immutable per-position snapshot
 
 `CoinStrategyParameters` is frozen. When a position opens it captures the
@@ -226,7 +254,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 185 tests
+pytest            # 194 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
