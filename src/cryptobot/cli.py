@@ -123,17 +123,56 @@ def _print_report(i: int, report: TickReport, account: LedgerAccount) -> None:
     print(f"[tick {i}] quote_balance={account.available_quote_balance()}")
 
 
+def load_klines_file(path: str) -> Mapping[str, Any]:
+    """Load ``{symbol: [binance kline array, ...]}`` and map to closed candles."""
+    from .exchange.market_data import parse_klines
+
+    with open(path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    return {symbol: parse_klines(rows, symbol) for symbol, rows in data.items()}
+
+
+def _run_backtest(args, config: ServiceConfig) -> int:
+    from .backtest import run_backtest
+
+    klines = load_klines_file(args.backtest)
+    quote_per_order = Decimal(args.quote_per_order) if args.quote_per_order else None
+    for symbol, params in config.coins.items():
+        candles = klines.get(symbol)
+        if not candles:
+            print(f"[backtest] {symbol}: no klines in file, skipping")
+            continue
+        report = run_backtest(
+            symbol, candles, params,
+            quote_per_order=quote_per_order,
+            starting_balance=Decimal(args.quote_balance),
+            fee_rate=config.cost_model.exit_fee_rate,
+            safety_buffer_frac=config.cost_model.safety_buffer_frac,
+        )
+        print(
+            f"[backtest] {symbol}: trades={report.num_trades} "
+            f"net_pnl={report.total_net_pnl} win_rate={report.win_rate:.0%} "
+            f"final_balance={report.final_balance} open={report.open_positions}"
+        )
+    return 0
+
+
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="cryptobot", description="Paper-run the strategy against live market data.")
+    parser = argparse.ArgumentParser(prog="cryptobot", description="Paper-run or backtest the strategy.")
     parser.add_argument("--config", required=True, help="Path to the JSON config file.")
-    parser.add_argument("--quote-balance", default="1000", help="Starting paper quote balance.")
+    parser.add_argument("--quote-balance", default="1000", help="Starting paper/backtest quote balance.")
     parser.add_argument("--ticks", type=int, default=0, help="Number of ticks (0 = run until interrupted).")
     parser.add_argument("--interval", type=float, default=60.0, help="Seconds between ticks.")
     parser.add_argument("--base-url", default="https://api.binance.com", help="Binance REST base URL.")
+    parser.add_argument("--backtest", default=None, help="Path to a JSON klines file to backtest instead of paper-running.")
+    parser.add_argument("--quote-per-order", default=None, help="Fixed quote size per order (backtest only).")
     args = parser.parse_args(argv)
 
     with open(args.config, "r", encoding="utf-8") as handle:
         config = service_config_from_dict(json.load(handle))
+
+    if args.backtest:
+        return _run_backtest(args, config)
 
     client = BinanceRestClient(urllib_transport, base_url=args.base_url)
     service, account = build_paper_service(client, config, args.quote_balance)

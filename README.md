@@ -45,8 +45,11 @@ src/cryptobot/
     providers.py     # operational helpers: clock, sizing, data freshness
     service.py       # TradingService: the per-coin scheduler loop
     paper.py         # paper ledger account + simulated executor
-  cli.py             # runnable paper-trading entrypoint (python -m cryptobot)
-tests/               # 173 tests; exact-boundary and golden-value coverage
+  backtest/          # historical replay through the SAME live engine
+    replay.py        # ReplayMarketData + BacktestClock
+    runner.py        # run_backtest + BacktestReport
+  cli.py             # runnable entrypoint: paper-trade or backtest
+tests/               # 185 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -182,6 +185,26 @@ to trade for real.
 python -m cryptobot --config examples/config.example.json --ticks 5 --interval 60
 ```
 
+## Backtesting
+
+`backtest/` replays a historical candle series through the **exact same**
+`TradingService` — identical signals, gates, and exit rules — one tick per candle,
+with fills simulated against a replayed order book (`ReplayMarketData` reveals only
+history up to the current index, so the engine never sees the future). It adds no
+strategy logic; backtest fills are an explicit approximation, never a substitute
+for real execution. `run_backtest(...)` returns a `BacktestReport` (trades, net
+PnL, win rate, final balance). From the CLI, point `--backtest` at a JSON klines
+file (`{symbol: [binance kline array, …]}`):
+
+```bash
+python -m cryptobot --config examples/config.example.json \
+    --backtest klines.json --quote-per-order 100 --quote-balance 1000
+```
+
+By default the backtest uses the full available history as warmup so Wilder
+indicators are fully converged; a live deployment must fetch adequate warmup to
+match.
+
 ## Immutable per-position snapshot
 
 `CoinStrategyParameters` is frozen. When a position opens it captures the
@@ -203,7 +226,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 173 tests
+pytest            # 185 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
