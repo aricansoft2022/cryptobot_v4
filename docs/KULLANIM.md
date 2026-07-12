@@ -151,15 +151,16 @@ dolumları en iyi alış/satış fiyatından simüle eder. API anahtarı gerekme
 python -m cryptobot --config examples/config.example.json
 ```
 
-Faydalı bayraklar:
+Faydalı bayraklarla (tek satır — kopyala-yapıştır güvenli):
 
 ```bash
-python -m cryptobot --config config.json \
-    --quote-balance 5000 \    # başlangıç kağıt bakiyesi (capital_pct tabanı da bu)
-    --ticks 100 \             # 100 tur sonra dur (0 = sonsuz, Ctrl+C ile durdur)
-    --interval 60 \           # turlar arası saniye (1 dakikalık mumlar için 60)
-    --status-port 8787        # JSON durum sayfası (bkz. İzleme)
+python -m cryptobot --config config.json --quote-balance 5000 --ticks 100 --interval 60 --status-port 8787
 ```
+
+- `--quote-balance 5000` — başlangıç kağıt bakiyesi (`capital_pct` tabanı da bu)
+- `--ticks 100` — 100 tur sonra dur (`0` = sonsuz, Ctrl+C ile durdur)
+- `--interval 60` — turlar arası saniye (1 dakikalık mumlar için `60`)
+- `--status-port 8787` — JSON durum sayfası (bkz. İzleme)
 
 ### 4.2. Geriye dönük test (backtest)
 
@@ -167,11 +168,16 @@ Bir JSON mum (klines) dosyasını aynı motordan geçirir ve coin başına bir r
 (işlem sayısı, net PnL, kazanma oranı, son bakiye) yazar.
 
 ```bash
-python -m cryptobot --config config.json \
-    --backtest klines.json \
-    --quote-per-order 100 \   # işlem başına sabit USDT (opsiyonel; yoksa capital/slot)
-    --quote-balance 1000
+python -m cryptobot --config config.json --backtest klines.json --quote-per-order 100 --quote-balance 1000
 ```
+
+- `--backtest klines.json` — backtest edilecek mum dosyası
+- `--quote-per-order 100` — işlem başına sabit USDT (opsiyonel; yoksa `capital / slot_count`)
+- `--quote-balance 1000` — başlangıç bakiyesi (`capital_pct` tabanı)
+
+> **Not:** Komutları **tek satır** yaz. Çok satırlı `\` kullanacaksan, `\`
+> karakterinden **sonra boşluk veya yorum bırakma** — zsh/bash satır
+> birleştirmeyi bozar ("command not found" / "unrecognized arguments").
 
 **Mum dosyası biçimi** — `{ "SEMBOL": [ <binance kline dizisi>, ... ] }`. Binance'in
 REST `/api/v3/klines` çıktısı doğrudan kullanılabilir:
