@@ -12,6 +12,7 @@ from cryptobot.execution.pnl import ExitCostModel
 from cryptobot.runtime.live import (
     BinanceAccount,
     build_live_service,
+    fetch_total_quote,
     reconcile_positions,
     run_live,
 )
@@ -74,6 +75,15 @@ def test_account_reads_free_quote_balance():
     transport = FakeLiveTransport(balances=[{"asset": "USDT", "free": "532.5", "locked": "0"}])
     account = BinanceAccount(_client(transport))
     assert account.available_quote_balance() == Decimal("532.5")
+
+
+def test_fetch_total_quote_sums_free_and_locked():
+    # capital_pct resolves against total = free + locked USDT.
+    transport = FakeLiveTransport(balances=[
+        {"asset": "USDT", "free": "100", "locked": "25"},
+        {"asset": "BTC", "free": "1", "locked": "0"},
+    ])
+    assert fetch_total_quote(_client(transport)) == Decimal("125")
 
 
 def test_account_tracks_used_and_slots_from_reports():

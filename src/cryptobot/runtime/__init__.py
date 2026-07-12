@@ -4,6 +4,7 @@ from .live import (
     BinanceAccount,
     ReconcileResult,
     build_live_service,
+    fetch_total_quote,
     reconcile_positions,
     run_live,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "reconcile_positions",
     "build_live_service",
     "run_live",
+    "fetch_total_quote",
     "MetricsTracker",
     "OpenPositionView",
     "StatusSnapshot",

@@ -52,7 +52,7 @@ src/cryptobot/
     replay.py        # ReplayMarketData + BacktestClock
     runner.py        # run_backtest + BacktestReport
   cli.py             # runnable entrypoint: paper-trade, backtest, or live
-tests/               # 203 tests; exact-boundary and golden-value coverage
+tests/               # 210 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -259,6 +259,33 @@ decision, against the current book). Example payload:
 python -m cryptobot --config examples/config.example.json --status-port 8787
 ```
 
+## Per-coin configuration
+
+Every coin under the config's `coins` map is independent — add or remove a coin
+by editing the file and restarting (there is no runtime add/remove). Per coin you
+set:
+
+- **Signal thresholds**: `rsi_oversold`, `rsi_overbought`, `adx_low`, `adx_high`
+  (plus periods `rsi_period` / `rsi_ma_period` / `adx_period` / `adr_period` and
+  `min_net_profit_pct`).
+- **Capital** — choose exactly one:
+  - `capital_limit_usdt` — a fixed absolute cap; or
+  - `capital_pct` — a percentage of your **total USDT balance** (free + locked),
+    resolved to an absolute cap **once at startup** and then fixed for the session
+    (restart to re-resolve). Paper/backtest resolve it against `--quote-balance`;
+    live reads your real balance.
+- **`slot_count`** — how many parts the capital is split into: each order uses
+  `capital / slot_count`, and at most `slot_count` positions are open at once.
+
+```json
+"BTCUSDT": { "...": "...", "capital_limit_usdt": "1000", "slot_count": 3 },
+"ETHUSDT": { "...": "...", "capital_pct": 30,            "slot_count": 2 }
+```
+
+BTC gets a fixed 1000 USDT split into 3 (~333 each); ETH gets 30% of your total
+USDT split into 2. Each open position captures these as an immutable snapshot, so
+later config changes never affect positions already open.
+
 ## Immutable per-position snapshot
 
 `CoinStrategyParameters` is frozen. When a position opens it captures the
@@ -280,7 +307,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 203 tests
+pytest            # 210 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the

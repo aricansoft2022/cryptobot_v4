@@ -85,6 +85,18 @@ class BinanceAccount:
             self._slots[position.symbol] = max(0, self.open_and_reserved_slots(position.symbol) - 1)
 
 
+def fetch_total_quote(client: BinanceRestClient, quote_asset: str = "USDT") -> Decimal:
+    """Return the total (free + locked) quote-asset balance from the exchange.
+
+    Used to resolve percentage-based per-coin capital at startup.
+    """
+    account = client.account()
+    for entry in account.get("balances", []):
+        if entry.get("asset") == quote_asset:
+            return _as_decimal(entry.get("free", "0")) + _as_decimal(entry.get("locked", "0"))
+    return Decimal("0")
+
+
 @dataclass(frozen=True)
 class ReconcileResult:
     """Outcome of comparing tracked positions against exchange balances."""
