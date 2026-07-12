@@ -9,6 +9,9 @@ indicators, extra filters, stop-loss, trailing stop, alternative crossover rules
 or alternative entry/exit logic. Every rule below is implemented exactly as
 specified.
 
+> 📖 **Türkçe kullanım kılavuzu:** [`docs/KULLANIM.md`](docs/KULLANIM.md) —
+> kurulum, konfigürasyon, kağıt/backtest/canlı modlar ve izleme.
+
 ## Layout
 
 ```
