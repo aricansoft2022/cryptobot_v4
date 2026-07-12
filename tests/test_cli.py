@@ -6,6 +6,8 @@ import json
 import time
 from decimal import Decimal
 
+import pytest
+
 from cryptobot.cli import (
     build_paper_service,
     coin_params_from_dict,
@@ -56,6 +58,56 @@ def test_service_config_from_dict():
     assert set(config.coins) == {"BTCUSDT"}
     assert config.cost_model.exit_fee_rate == Decimal("0.001")
     assert config.candle_buffer == 7
+
+
+# -- percentage-based capital allocation ------------------------------------
+
+_PCT_COIN = {k: v for k, v in _CONFIG["coins"]["BTCUSDT"].items() if k != "capital_limit_usdt"}
+_PCT_COIN["capital_pct"] = 25  # 25% of the total balance
+
+
+def test_capital_pct_resolves_against_total_balance():
+    coin = {**_PCT_COIN, "slot_count": 5}
+    params = coin_params_from_dict(coin, total_quote=Decimal("1000"))
+    assert params.capital_limit_usdt == Decimal("250.00000000")  # 25% of 1000
+    # Per-order size is that limit / slot_count.
+    assert params.capital_limit_usdt / params.slot_count == Decimal("50.00000000")
+
+
+def test_capital_pct_requires_total_balance():
+    with pytest.raises(ValueError):
+        coin_params_from_dict(_PCT_COIN)  # no total_quote
+
+
+def test_capital_rejects_both_pct_and_absolute():
+    with pytest.raises(ValueError):
+        coin_params_from_dict({**_PCT_COIN, "capital_limit_usdt": "800"}, total_quote=Decimal("1000"))
+
+
+def test_capital_requires_one_of_pct_or_absolute():
+    neither = {k: v for k, v in _PCT_COIN.items() if k != "capital_pct"}
+    with pytest.raises(ValueError):
+        coin_params_from_dict(neither, total_quote=Decimal("1000"))
+
+
+def test_capital_pct_must_be_in_range():
+    for bad in (0, -5, 150):
+        with pytest.raises(ValueError):
+            coin_params_from_dict({**_PCT_COIN, "capital_pct": bad}, total_quote=Decimal("1000"))
+
+
+def test_service_config_mixes_absolute_and_percentage():
+    data = {
+        "coins": {
+            "BTCUSDT": {**_CONFIG["coins"]["BTCUSDT"]},   # absolute 1000
+            "ETHUSDT": {**_PCT_COIN},                     # 25% of 2000 -> 500
+        },
+        "cost_model": {},
+        "candle_buffer": 5,
+    }
+    config = service_config_from_dict(data, total_quote=Decimal("2000"))
+    assert config.coins["BTCUSDT"].capital_limit_usdt == Decimal("1000")
+    assert config.coins["ETHUSDT"].capital_limit_usdt == Decimal("500.00000000")
 
 
 def _klines_near_now():

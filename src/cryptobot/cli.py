@@ -36,7 +36,7 @@ from typing import Any, Callable, Mapping, Optional, Tuple
 from .exchange.binance_rest import BinanceMarketData, BinanceRestClient
 from .exchange.http import urllib_transport
 from .execution.pnl import ExitCostModel
-from .runtime.live import build_live_service, run_live
+from .runtime.live import build_live_service, fetch_total_quote, run_live
 from .runtime.metrics import MetricsTracker, build_status
 from .runtime.paper import LedgerAccount, PaperExecution
 from .runtime.providers import SystemClock
@@ -45,8 +45,38 @@ from .runtime.status_server import StatusServer
 from .strategy.parameters import CoinStrategyParameters
 
 
-def coin_params_from_dict(data: Mapping[str, Any]) -> CoinStrategyParameters:
-    """Build :class:`CoinStrategyParameters` from a JSON-decoded mapping."""
+def _resolve_capital_limit(data: Mapping[str, Any], total_quote: Optional[Any]) -> Decimal:
+    """Resolve a coin's absolute capital limit from ``capital_limit_usdt`` or
+    ``capital_pct`` (a percentage of the total quote balance).
+
+    ``capital_pct`` is resolved once, here at startup, against ``total_quote``
+    (your total USDT balance), and then stays fixed for the session.
+    """
+    has_abs = "capital_limit_usdt" in data
+    has_pct = "capital_pct" in data
+    if has_abs and has_pct:
+        raise ValueError("specify either capital_limit_usdt or capital_pct, not both")
+    if has_abs:
+        return Decimal(str(data["capital_limit_usdt"]))
+    if has_pct:
+        pct = Decimal(str(data["capital_pct"]))
+        if not (Decimal("0") < pct <= Decimal("100")):
+            raise ValueError(f"capital_pct must be within (0, 100], got {pct}")
+        if total_quote is None:
+            raise ValueError("capital_pct requires a known total quote balance")
+        limit = Decimal(str(total_quote)) * pct / Decimal("100")
+        return limit.quantize(Decimal("0.00000001"))
+    raise ValueError("coin config needs either capital_limit_usdt or capital_pct")
+
+
+def coin_params_from_dict(
+    data: Mapping[str, Any], total_quote: Optional[Any] = None
+) -> CoinStrategyParameters:
+    """Build :class:`CoinStrategyParameters` from a JSON-decoded mapping.
+
+    ``total_quote`` (the total USDT balance) is only required when a coin uses
+    ``capital_pct`` instead of an absolute ``capital_limit_usdt``.
+    """
     return CoinStrategyParameters(
         rsi_oversold=float(data["rsi_oversold"]),
         rsi_overbought=float(data["rsi_overbought"]),
@@ -57,14 +87,19 @@ def coin_params_from_dict(data: Mapping[str, Any]) -> CoinStrategyParameters:
         rsi_ma_period=int(data["rsi_ma_period"]),
         adx_period=int(data["adx_period"]),
         adr_period=int(data["adr_period"]),
-        capital_limit_usdt=Decimal(str(data["capital_limit_usdt"])),
+        capital_limit_usdt=_resolve_capital_limit(data, total_quote),
         slot_count=int(data["slot_count"]),
     )
 
 
-def service_config_from_dict(data: Mapping[str, Any]) -> ServiceConfig:
-    """Build a :class:`ServiceConfig` from a JSON-decoded mapping."""
-    coins = {sym: coin_params_from_dict(p) for sym, p in data["coins"].items()}
+def service_config_from_dict(
+    data: Mapping[str, Any], total_quote: Optional[Any] = None
+) -> ServiceConfig:
+    """Build a :class:`ServiceConfig` from a JSON-decoded mapping.
+
+    Pass ``total_quote`` (total USDT balance) when any coin uses ``capital_pct``.
+    """
+    coins = {sym: coin_params_from_dict(p, total_quote) for sym, p in data["coins"].items()}
     cm = data.get("cost_model", {})
     cost_model = ExitCostModel(
         exit_fee_rate=Decimal(str(cm.get("exit_fee_rate", "0"))),
@@ -196,7 +231,7 @@ def _live_report(i: int, report: TickReport, recon) -> None:
         print(f"[tick {i}] SELL {pos.symbol} net_pnl={pnl.net_pnl}")
 
 
-def _run_live(args, config: ServiceConfig) -> int:
+def _run_live(args, raw_config: Mapping[str, Any]) -> int:
     api_key = os.environ.get("BINANCE_API_KEY", "")
     api_secret = os.environ.get("BINANCE_API_SECRET", "")
     if not api_key or not api_secret:
@@ -210,6 +245,10 @@ def _run_live(args, config: ServiceConfig) -> int:
     client = BinanceRestClient(
         urllib_transport, api_key=api_key, api_secret=api_secret, base_url=base_url
     )
+    # Resolve any percentage-based capital against the real total USDT balance now.
+    total_quote = fetch_total_quote(client)
+    config = service_config_from_dict(raw_config, total_quote=total_quote)
+    print(f"Total USDT balance: {total_quote}")
     service, account = build_live_service(client, config)
     where = "TESTNET" if args.testnet else "REAL MONEY"
     print(f"*** LIVE trading on {where}: {list(config.coins)} ***")
@@ -251,12 +290,15 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     with open(args.config, "r", encoding="utf-8") as handle:
-        config = service_config_from_dict(json.load(handle))
+        raw_config = json.load(handle)
 
+    if args.live:
+        return _run_live(args, raw_config)
+
+    # Paper/backtest: percentages resolve against the (paper) starting balance.
+    config = service_config_from_dict(raw_config, total_quote=Decimal(args.quote_balance))
     if args.backtest:
         return _run_backtest(args, config)
-    if args.live:
-        return _run_live(args, config)
 
     client = BinanceRestClient(urllib_transport, base_url=args.base_url)
     service, account = build_paper_service(client, config, args.quote_balance)

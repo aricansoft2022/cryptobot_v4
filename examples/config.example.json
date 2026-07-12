@@ -23,7 +23,7 @@
       "rsi_ma_period": 20,
       "adx_period": 14,
       "adr_period": 14,
-      "capital_limit_usdt": "500",
+      "capital_pct": 30,
       "slot_count": 2
     }
   },
