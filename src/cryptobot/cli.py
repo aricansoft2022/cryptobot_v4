@@ -33,6 +33,7 @@ import time
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Tuple
 
+from .dotenv import load_dotenv
 from .exchange.binance_rest import BinanceMarketData, BinanceRestClient
 from .exchange.http import urllib_transport
 from .execution.pnl import ExitCostModel
@@ -287,7 +288,13 @@ def main(argv=None) -> int:
     parser.add_argument("--testnet", action="store_true", help="Use the Binance testnet (safe, fake money).")
     parser.add_argument("--yes-trade-real-money", action="store_true", help="Required to trade REAL money in --live mode.")
     parser.add_argument("--status-port", type=int, default=None, help="Serve a JSON status snapshot on this port (paper/live).")
+    parser.add_argument("--env-file", default=".env", help="Path to a .env file with API credentials (default: .env).")
     args = parser.parse_args(argv)
+
+    # Load credentials from the .env file (does not override real env vars).
+    loaded = load_dotenv(args.env_file)
+    if loaded:
+        print(f"Loaded {len(loaded)} variable(s) from {args.env_file}: {', '.join(sorted(loaded))}")
 
     with open(args.config, "r", encoding="utf-8") as handle:
         raw_config = json.load(handle)

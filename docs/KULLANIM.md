@@ -198,9 +198,16 @@ Binance'te **gerçek emir** gönderir. Güvenlik katmanlıdır:
 - **Gerçek para** için açıkça `--yes-trade-real-money` gerekir; aksi halde
   `--testnet` (sahte para, Binance testnet) kullanılır.
 
+**Anahtarları `.env` dosyasından okutmak (önerilir).** Depodaki `.env.example`'ı
+`.env` olarak kopyala ve doldur. `.env` `.gitignore`'dadır — asla commit edilmez.
+Bot her çalıştığında `.env`'i otomatik yükler (kabukta zaten tanımlı bir değişken
+varsa o öncelikli olur).
+
 ```bash
-export BINANCE_API_KEY=xxxx
-export BINANCE_API_SECRET=yyyy
+cp .env.example .env
+# .env içeriği:
+#   BINANCE_API_KEY=xxxx
+#   BINANCE_API_SECRET=yyyy
 
 # 1) ÖNCE testnet (sahte para) — testnet anahtarları https://testnet.binance.vision
 python -m cryptobot --config config.json --live --testnet --status-port 8787
@@ -208,6 +215,10 @@ python -m cryptobot --config config.json --live --testnet --status-port 8787
 # 2) Gerçek para (bilerek onayla)
 python -m cryptobot --config config.json --live --yes-trade-real-money --status-port 8787
 ```
+
+Alternatif olarak anahtarları kabukta da verebilirsin
+(`export BINANCE_API_KEY=...`), veya başka bir dosya için `--env-file yol/.env`
+kullanabilirsin.
 
 Canlı modda her turda: gerçek USDT bakiyen yenilenir, **mutabakat (reconciliation)**
 yapılır (borsadaki gerçek bakiye ile botun beklediği pozisyonlar karşılaştırılır) ve
@@ -342,8 +353,12 @@ göre doğrulanır/yuvarlanır.
 | `--testnet` | kapalı | Binance testnet (sahte para) |
 | `--yes-trade-real-money` | kapalı | Gerçek parayla işlem için zorunlu onay |
 | `--status-port N` | — | JSON durum sunucusu portu |
+| `--env-file YOL` | `.env` | Ortam değişkenlerinin okunacağı `.env` dosyası |
 
 ### Ortam değişkenleri (yalnızca canlı)
+
+Bunlar `.env` dosyasına yazılabilir (bkz. 4.3) ya da kabukta `export` ile
+verilebilir. Kabukta zaten tanımlıysa `.env`'i geçersiz kılar (kabuk önceliklidir).
 
 | Değişken | Anlamı |
 |----------|--------|

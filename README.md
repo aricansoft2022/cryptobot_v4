@@ -55,7 +55,8 @@ src/cryptobot/
     replay.py        # ReplayMarketData + BacktestClock
     runner.py        # run_backtest + BacktestReport
   cli.py             # runnable entrypoint: paper-trade, backtest, or live
-tests/               # 210 tests; exact-boundary and golden-value coverage
+  dotenv.py          # stdlib .env loader for credentials
+tests/               # 219 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -228,8 +229,11 @@ Live trading is opt-in and hard to trigger by accident:
 - real money requires an explicit `--yes-trade-real-money`; otherwise use
   `--testnet` (Binance testnet, fake money).
 
+Credentials come from the environment or a git-ignored `.env` file (copy
+`.env.example` to `.env` and fill it in; the shell wins over `.env`):
+
 ```bash
-export BINANCE_API_KEY=... BINANCE_API_SECRET=...
+cp .env.example .env    # then set BINANCE_API_KEY / BINANCE_API_SECRET
 python -m cryptobot --config examples/config.example.json --live --testnet        # safe
 python -m cryptobot --config examples/config.example.json --live --yes-trade-real-money
 ```
@@ -310,7 +314,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 210 tests
+pytest            # 219 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the
