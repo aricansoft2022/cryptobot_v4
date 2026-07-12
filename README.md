@@ -204,8 +204,7 @@ PnL, win rate, final balance). From the CLI, point `--backtest` at a JSON klines
 file (`{symbol: [binance kline array, …]}`):
 
 ```bash
-python -m cryptobot --config examples/config.example.json \
-    --backtest klines.json --quote-per-order 100 --quote-balance 1000
+python -m cryptobot --config examples/config.example.json --backtest klines.json --quote-per-order 100 --quote-balance 1000
 ```
 
 By default the backtest uses the full available history as warmup so Wilder
