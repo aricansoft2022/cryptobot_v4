@@ -31,5 +31,5 @@
     "exit_fee_rate": "0.001",
     "safety_buffer_frac": "0.0005"
   },
-  "candle_buffer": 5
+  "candle_buffer": 200
 }
