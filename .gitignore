@@ -21,6 +21,11 @@ htmlcov/
 venv/
 env/
 
+# Secrets — never commit a real .env (keep the .env.example template)
+.env
+.env.local
+.env.*.local
+
 # Editor / OS
 .idea/
 .vscode/
