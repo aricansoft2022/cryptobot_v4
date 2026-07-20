@@ -56,7 +56,8 @@ src/cryptobot/
     runner.py        # run_backtest + BacktestReport
   cli.py             # runnable entrypoint: paper-trade, backtest, or live
   dotenv.py          # stdlib .env loader for credentials
-tests/               # 219 tests; exact-boundary and golden-value coverage
+  fetch.py           # paginated Binance klines downloader (python -m cryptobot.fetch)
+tests/               # 226 tests; exact-boundary and golden-value coverage
 ```
 
 ## Indicators
@@ -203,7 +204,11 @@ for real execution. `run_backtest(...)` returns a `BacktestReport` (trades, net
 PnL, win rate, final balance). From the CLI, point `--backtest` at a JSON klines
 file (`{symbol: [binance kline array, …]}`):
 
+Binance caps a klines request at 1000 candles, so fetch a longer, multi-symbol
+history (paginated) with the built-in downloader, then backtest it:
+
 ```bash
+python -m cryptobot.fetch BTCUSDT,ETHUSDT --total 5000 --output klines.json
 python -m cryptobot --config examples/config.example.json --backtest klines.json --quote-per-order 100 --quote-balance 1000
 ```
 
@@ -313,7 +318,7 @@ network in the codebase.
 ## Running the tests
 
 ```bash
-pytest            # 219 tests
+pytest            # 226 tests
 ```
 
 (`pyproject.toml` sets `pythonpath = ["src"]`; a root `conftest.py` provides the

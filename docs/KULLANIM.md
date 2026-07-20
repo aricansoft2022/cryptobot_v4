@@ -179,16 +179,32 @@ python -m cryptobot --config config.json --backtest klines.json --quote-per-orde
 > karakterinden **sonra boşluk veya yorum bırakma** — zsh/bash satır
 > birleştirmeyi bozar ("command not found" / "unrecognized arguments").
 
-**Mum dosyası biçimi** — `{ "SEMBOL": [ <binance kline dizisi>, ... ] }`. Binance'in
-REST `/api/v3/klines` çıktısı doğrudan kullanılabilir:
+**Mum dosyası biçimi** — `{ "SEMBOL": [ <binance kline dizisi>, ... ] }`. Birden
+çok sembol **tek dosyada** olabilir; o zaman tek koşuda hepsi test edilir.
+
+**Önerilen — dahili indirici (çok sembollü + sayfalamalı).** Binance tek istekte
+en fazla **1000 mum** verir; daha uzun geçmiş için sayfalama (pagination) gerekir.
+Dahili araç bunu yapıp tek dosyaya yazar:
 
 ```bash
-# BTCUSDT için son 1000 adet 1 dakikalık mumu indir ve sarmala
-curl -s "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=1000" > btc.json
-python -c "import json;print(json.dumps({'BTCUSDT': json.load(open('btc.json'))}))" > klines.json
-
+python -m cryptobot.fetch BTCUSDT,ETHUSDT --total 5000 --output klines.json
 python -m cryptobot --config config.json --backtest klines.json --quote-per-order 100
 ```
+
+`--total` sembol başına mum sayısıdır (5000 ≈ 3,5 günlük 1m veri). Her iki sembol
+de aynı dosyada olduğu için tek koşu ikisini de backtest eder.
+
+**Hızlı yol (tek istek, en fazla 1000 mum)** — küçük bir deneme için:
+
+```bash
+curl -s "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=1000" > btc.json
+python -c "import json;print(json.dumps({'BTCUSDT': json.load(open('btc.json'))}))" > klines.json
+python -m cryptobot --config config.json --backtest klines.json --quote-per-order 100
+```
+
+> **Uyarı:** Binance'te `limit` en fazla **1000**'dir; `limit=100000000` gibi büyük
+> değerler işe yaramaz (yine ~1000 mum gelir). Uzun geçmiş için yukarıdaki
+> `python -m cryptobot.fetch` aracını kullan.
 
 > Backtest, göstergelerin tam oturması için varsayılan olarak **tüm geçmişi**
 > ısınma (warmup) verisi olarak kullanır. Canlıda buna denk davranış için
